@@ -5,6 +5,7 @@
   "dependencies": {
     "compression": "~1.0.1",
     "express-jwt": "^0.1.3",
+    "langdetect": "^0.2.0",
     "lodash": "^2.4.1",
     "mongodb": "^2.0.25",
     "node-redis-queue": "^0.2.5",
