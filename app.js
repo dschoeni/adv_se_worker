@@ -46,12 +46,13 @@ var consumeTweet = function () {
     channel.pop(queueName, function (tweet) {
 
         var phrases = tweet.phrase.split(",");
-        var tweetText = tweet.text + tweet.username + tweet.hashtag;
+        var tweetText = tweet.text;
 
         _.forEach(phrases, function (phrase) {
-            if (tweetText.search(phrase) !== -1) {
 
-                Sentiment(tweet.text, function (err, result) {
+            if (tweetText != undefined && tweetText.search(phrase) > -1) {
+
+                Sentiment(tweetText, function (err, result) {
                     tweetsTotalSentiment += result.score;
                     tweetsCount++;
 
@@ -79,7 +80,7 @@ var consumeTweet = function () {
                 });
 
             } else {
-                console.log("Skipped Tweet.");
+                consumeTweet(); // consume moar!
             }
         });
 
