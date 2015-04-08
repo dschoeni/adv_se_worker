@@ -7,6 +7,8 @@
 // os utils
 var os = require('os-utils');
 var _ = require('lodash');
+var mongoose = require('mongoose');
+
 
 // redis
 var queueName = "tweetQueue";
@@ -14,75 +16,151 @@ var chnl = require('node-redis-queue').Channel;
 var channel = new chnl();
 var Sentiment = require('sentiment');
 
-// mongodb
-var MongoClient = require('mongodb').MongoClient;
-var url = 'mongodb://localhost:27017/myproject';
-var collection;
-
-// Use connect method to connect to the Server
-MongoClient.connect(url, function (err, db) {
-    console.log("Connected correctly to server");
-    collection = db.collection('sentiment');
-
-    channel.on('error', function (error) {
-        console.log('Stopping due to: ' + error);
-        process.exit();
-    });
-
-    channel.connect(function () {
-        console.log('ready');
-        consumeTweet(); // enter consume-loop
-    });
-
+var keywordSchema = mongoose.Schema({
+    keyword: String,
+    analyzedTweets: Number,
+    sentiment: Number
 });
 
-// some vars we need
-var tweetsCount = 0;
-var tweetsTotalSentiment = 0;
+var Keyword = mongoose.model('Keyword', keywordSchema);
 
-// Worker funktion
+// Connect to database
+mongoose.connect('mongodb://localhost/keywords-test');
+
+channel.on('error', function (error) {
+    console.log('Stopping due to: ' + error);
+    process.exit();
+});
+
+channel.connect(function () {
+    console.log('ready');
+    consumeTweet(); // enter consume-loop
+});
+
+var totalTweets = 0;
+
+// Worker function
 var consumeTweet = function () {
 
     channel.pop(queueName, function (tweet) {
 
+        if (tweet.entities == undefined) {
+            consumeTweet();
+            return;
+        }
+
+        totalTweets++;
+
+        if (totalTweets % 15 == 0) {
+            os.cpuUsage(function (v) {
+                console.log('CPU Usage (%): ' + v);
+            });
+        }
+
         var phrases = tweet.phrase.split(",");
-        var tweetText = tweet.text;
+        var tweet_text = tweet.text;
+        var urls = tweet.entities.urls; // [] -> expanded_url, display_url
+        var media = tweet.entities.media; // [] -> expanded_url, display_url
+        var hashtags = tweet.entities.hashtags; // [] -> text
+        var user_mentions = tweet.entities.user_mentions; // [] -> screen_name
+
+        var match = function (phrase) {
+
+            var twitterMatch = function(text) {
+                // TODO: to be improved with fancy regex according to https://dev.twitter.com/streaming/overview/request-parameters#track
+                return text.search(phrase) > -1;
+            };
+
+            // Check Tweet text
+            if (twitterMatch(tweet_text)) {
+                // console.log("Matched " + phrase + " in text: " + tweet_text);
+                return true;
+            }
+
+            // check urls
+            _.forEach(urls, function (url) {
+                if (url.hasOwnProperty('expanded_url') && twitterMatch(url.expanded_url)
+                    || url.hasOwnProperty('display_url') && twitterMatch(url.display_url)) {
+                    // console.log("Matched " + phrase + " in URL:");
+                    // console.log(url);
+                    return true;
+                }
+            });
+
+            // check media
+            _.forEach(media, function (medium) {
+                if (medium.hasOwnProperty('expanded_url') && twitterMatch(medium.expanded_url)
+                    || medium.hasOwnProperty('display_url') && twitterMatch(medium.display_url)) {
+                    // console.log("Matched " + phrase + " in media:");
+                    // console.log(medium);
+                    return true;
+                }
+            });
+
+            // check hashtags
+            _.forEach(hashtags, function (ht) {
+                if (ht.hasOwnProperty('text') && twitterMatch(ht.text)) {
+                    // console.log("Matched " + phrase + " in hashtag: " + ht.text);
+                    return true;
+                }
+            });
+
+            // check user mentions
+            _.forEach(user_mentions, function (user) {
+                if (user.hasOwnProperty('screen_name') && twitterMatch(user.screen_name)) {
+                    //console.log("Matched " + phrase + " in user mentions: " + user.screen_name);
+                    return true;
+                }
+            });
+
+            // else
+            return false;
+        };
+
+        var updateKeyword = function (keyword) {
+            Sentiment(tweet_text, function (err, result) {
+                if (err) throw err;
+                var sentiment = (keyword.analyzedTweets * keyword.sentiment + result.score) / (keyword.analyzedTweets + 1);
+                var analyzedTweets = keyword.analyzedTweets + 1;
+
+                Keyword.update({_id: keyword._id}, {
+                    analyzedTweets: analyzedTweets,
+                    sentiment: sentiment
+                }, {}, function (err, result) {
+                    if (err) throw err;
+                    // console.log(result);
+                    consumeTweet();
+                });
+            });
+        };
 
         _.forEach(phrases, function (phrase) {
+            var matched = match(phrase);
+            // console.log(matched);
+            if (matched) {
 
-            if (tweetText != undefined && tweetText.search(phrase) > -1) {
-
-                Sentiment(tweetText, function (err, result) {
-                    tweetsTotalSentiment += result.score;
-                    tweetsCount++;
-
-                    if (tweetsCount % 15 === 0) {
-                        var calculatedSentiment = tweetsTotalSentiment / 15;
-                        tweetsTotalSentiment = 0;
-
-                        os.cpuUsage(function (v) {
-                            console.log('CPU Usage (%): ' + v);
+                Keyword.findOne({keyword: phrase}, function (err, foundKeyword) {
+                    if (err) throw err;
+                    // console.log("-----------------> " + foundKeyword);
+                    if (foundKeyword == null) {
+                        var newKeyword = new Keyword({
+                            keyword: phrase,
+                            analyzedTweets: 0,
+                            sentiment: 0
                         });
 
-                        collection.insertOne({
-                            phrase: phrase,
-                            sentiment: calculatedSentiment
-                        }, function (err, result) {
-                            console.log("Inserted Tweets");
+                        newKeyword.save(function (err, keyword) {
+                            if (err) throw err;
+                            console.log("Inserted new phrase");
+                            updateKeyword(keyword);
                         });
-
-                        consumeTweet(); // and consume moar!
-
                     } else {
-                        consumeTweet(); // consume moar!
+                        updateKeyword(foundKeyword);
                     }
-
                 });
-
             } else {
-                consumeTweet(); // consume moar!
+                consumeTweet();
             }
         });
-
     });
-}
+};
