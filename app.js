@@ -18,8 +18,8 @@ var Sentiment = require('sentiment');
 
 var keywordSchema = mongoose.Schema({
     keyword: String,
-    analyzedTweets: Number,
-    sentiment: Number
+    sentiment: Number,
+    timestamp: Date
 });
 
 var Keyword = mongoose.model('Keyword', keywordSchema);
@@ -41,6 +41,10 @@ var totalTweets = 0;
 
 // Worker function
 var consumeTweet = function () {
+
+    if (totalTweets % 500 == 0) {
+        aggregate();
+    }
 
     channel.pop(queueName, function (tweet) {
 
@@ -66,7 +70,7 @@ var consumeTweet = function () {
 
         var match = function (phrase) {
 
-            var twitterMatch = function(text) {
+            var twitterMatch = function (text) {
                 // TODO: to be improved with fancy regex according to https://dev.twitter.com/streaming/overview/request-parameters#track
                 return text.search(phrase) > -1;
             };
@@ -117,50 +121,48 @@ var consumeTweet = function () {
             return false;
         };
 
-        var updateKeyword = function (keyword) {
-            Sentiment(tweet_text, function (err, result) {
-                if (err) throw err;
-                var sentiment = (keyword.analyzedTweets * keyword.sentiment + result.score) / (keyword.analyzedTweets + 1);
-                var analyzedTweets = keyword.analyzedTweets + 1;
-
-                Keyword.update({_id: keyword._id}, {
-                    analyzedTweets: analyzedTweets,
-                    sentiment: sentiment
-                }, {}, function (err, result) {
-                    if (err) throw err;
-                    // console.log(result);
-                    consumeTweet();
-                });
-            });
-        };
-
         _.forEach(phrases, function (phrase) {
             var matched = match(phrase);
             // console.log(matched);
             if (matched) {
 
-                Keyword.findOne({keyword: phrase}, function (err, foundKeyword) {
+                Sentiment(tweet_text, function (err, result) {
                     if (err) throw err;
-                    // console.log("-----------------> " + foundKeyword);
-                    if (foundKeyword == null) {
-                        var newKeyword = new Keyword({
-                            keyword: phrase,
-                            analyzedTweets: 0,
-                            sentiment: 0
-                        });
 
-                        newKeyword.save(function (err, keyword) {
-                            if (err) throw err;
-                            console.log("Inserted new phrase");
-                            updateKeyword(keyword);
-                        });
-                    } else {
-                        updateKeyword(foundKeyword);
-                    }
+                    var newKeyword = new Keyword({
+                        keyword: phrase,
+                        sentiment: result.score,
+                        timestamp: new Date()
+                    });
+
+                    newKeyword.save(function (err, keyword) {
+                        if (err) throw err;
+                        // console.log("Inserted new phrase");
+                        consumeTweet();
+                    });
                 });
             } else {
                 consumeTweet();
             }
         });
     });
+};
+
+var aggregate = function() {
+    var o = {};
+    o.map = function() { emit(this.keyword, this.sentiment) };
+    o.reduce = function(k, vals) {
+        var sum = 0;
+        for (var i = 0; i < vals.length; i++) {
+            sum += vals[i];
+        }
+        return sum / vals.length;
+    };
+    o.out = { replace: 'aggregated'};
+    o.verbose = true;
+
+    Keyword.mapReduce(o, function(err, model, stats) {
+        if (err) throw err;
+        console.log('map reduce finished in ' + stats.processtime + ' ms. check collection aggregated!');
+    })
 };
