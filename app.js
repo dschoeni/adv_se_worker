@@ -70,6 +70,8 @@ var consumeTweet = function () {
 
         var match = function (phrase) {
 
+            var match = false;
+
             var twitterMatch = function (text) {
                 // TODO: to be improved with fancy regex according to https://dev.twitter.com/streaming/overview/request-parameters#track
                 return text.search(phrase) > -1;
@@ -78,7 +80,7 @@ var consumeTweet = function () {
             // Check Tweet text
             if (twitterMatch(tweet_text)) {
                 // console.log("Matched " + phrase + " in text: " + tweet_text);
-                return true;
+                match = true;
             }
 
             // check urls
@@ -87,7 +89,7 @@ var consumeTweet = function () {
                     || url.hasOwnProperty('display_url') && twitterMatch(url.display_url)) {
                     // console.log("Matched " + phrase + " in URL:");
                     // console.log(url);
-                    return true;
+                    match = true;
                 }
             });
 
@@ -97,7 +99,7 @@ var consumeTweet = function () {
                     || medium.hasOwnProperty('display_url') && twitterMatch(medium.display_url)) {
                     // console.log("Matched " + phrase + " in media:");
                     // console.log(medium);
-                    return true;
+                    match = true;
                 }
             });
 
@@ -105,7 +107,7 @@ var consumeTweet = function () {
             _.forEach(hashtags, function (ht) {
                 if (ht.hasOwnProperty('text') && twitterMatch(ht.text)) {
                     // console.log("Matched " + phrase + " in hashtag: " + ht.text);
-                    return true;
+                    match = true;
                 }
             });
 
@@ -113,12 +115,11 @@ var consumeTweet = function () {
             _.forEach(user_mentions, function (user) {
                 if (user.hasOwnProperty('screen_name') && twitterMatch(user.screen_name)) {
                     //console.log("Matched " + phrase + " in user mentions: " + user.screen_name);
-                    return true;
+                    match = true;
                 }
             });
 
-            // else
-            return false;
+            return match;
         };
 
         _.forEach(phrases, function (phrase) {
