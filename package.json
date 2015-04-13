@@ -9,7 +9,7 @@
     "langdetect": "^0.2.0",
     "lodash": "^2.4.1",
     "mongoose": "^4.0.1",
-    "node-redis-queue": "^0.2.5",
+    "simple-redis-safe-work-queue": "^2.0.0",
     "os-utils": "0.0.14",
     "redis": "^0.12.1",
     "sentiment": "^1.0.2"
