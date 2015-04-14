@@ -1,0 +1,17 @@
+{
+  "server": "deploy@AWS_IP",
+  "port": 22,
+  "server_dir": "/var/apps/adv_se_worker",
+  "repo": "https://github.com/dschoeni/adv_se_worker.git",
+  "prj_git_relative_dir": "",
+  "branch": "master",
+  "history releases count":3,
+  "force_regenerate_git_dir": false,
+  "shared_dirs": [
+    "node_modules"
+  ],
+  "prerun": [
+    "npm install"
+  ],
+  "run_cmd": "sudo sv restart adv_se_worker"
+}
