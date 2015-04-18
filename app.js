@@ -24,16 +24,12 @@ var keywordSchema = mongoose.Schema({
 var Keyword = mongoose.model('Keyword', keywordSchema);
 
 // Connect to database
-mongoose.connect('mongodb://localhost/keywords-test');
+mongoose.connect('mongodb://localhost/advsetwitter-dev');
 
 var totalTweets = 0;
 
 // Worker function
 var consumeTweet = function (tweet, callback) {
-
-	if (totalTweets % 500 == 0) {
-		aggregate();
-	}
 
 	if (tweet.entities == undefined || tweet == undefined) {
 		callback(); // continue
