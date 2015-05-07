@@ -17,6 +17,7 @@ var Sentiment = require('sentiment');
 
 var keywordSchema = mongoose.Schema({
 	keyword: String,
+  tweetText: String,
 	sentiment: Number,
 	timestamp: Date
 });
@@ -59,6 +60,7 @@ var consumeTweet = function (tweet, callback) {
 
 				var newKeyword = new Keyword({
 					keyword: phrase,
+          tweetText: tweet_text,
 					sentiment: result.score,
 					timestamp: new Date()
 				});
