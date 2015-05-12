@@ -58,10 +58,12 @@ var consumeTweet = function (tweet, callback) {
 			Sentiment(tweet_text, function (err, result) {
 				if (err) throw err;
 
+        var cleanedSentiment = (result.score + 5) / 10;
+
 				var newKeyword = new Keyword({
 					keyword: phrase,
           tweetText: tweet_text,
-					sentiment: result.score,
+					sentiment: cleanedSentiment,
 					timestamp: new Date()
 				});
 
@@ -108,7 +110,7 @@ var aggregate = function () {
 
 function twitterMatch(text, phrase) {
 	// TODO: to be improved with fancy regex according to https://dev.twitter.com/streaming/overview/request-parameters#track
-	return text.search(phrase) > -1;
+	return text.toLowerCase().search(phrase.toLowerCase()) > -1;
 }
 
 var tests = [
