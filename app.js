@@ -58,12 +58,12 @@ var consumeTweet = function (tweet, callback) {
 			Sentiment(tweet_text, function (err, result) {
 				if (err) throw err;
 
-        var cleanedSentiment = (result.score + 5) / 10;
+        // var cleanedSentiment = (result.score + 5) / 10;
 
 				var newKeyword = new Keyword({
 					keyword: phrase,
           tweetText: tweet_text,
-					sentiment: cleanedSentiment,
+					sentiment: result.score,
 					timestamp: new Date()
 				});
 
