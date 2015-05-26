@@ -11,6 +11,21 @@ var mongoose = require('mongoose');
 var async = require('async');
 var http = require('http');
 
+var socket = require('socket.io-client'); // TODO: should be location of streamer on amazon
+socket.connect('http://127.0.0.1:9000/socket.io-client');
+
+socket.on('connect', function(){
+    console.log("socket.io - connected");
+});
+
+socket.on('connect_error', function(err){
+    console.log(err);
+});
+
+socket.on('disconnect', function(){
+    console.log("socket.io - disconnected");
+});
+
 // redis
 var Queue = require('simple-redis-safe-work-queue');
 
@@ -68,28 +83,9 @@ var consumeTweet = function (tweet, callback) {
 
     if (totalTweets % 50 == 0) {
 
-        // calculate time it needed
+        // update stats
         var timePassed = Date.now() - startTime;
-        var throughput = 50 / (timePassed / 1000);
-
-        // get CPU-usage
-        os.cpuUsage(function (cpuload) {
-
-            var stats = {
-                instanceId: instanceId,
-                throughput: throughput,
-                cpuload: cpuload,
-                timestamp: new Date()
-            }
-
-            // save stats
-            var worker = new WorkerStat(stats);
-            worker.save(function (err, stats) {
-                if (err) console.log(err);
-                console.log(stats);
-            });
-
-        });
+        updateStats(timePassed, 'aws:update');
 
         // reset time for processing
         startTime = Date.now();
@@ -135,9 +131,42 @@ var consumeTweet = function (tweet, callback) {
 };
 
 var startWorker = function() {
+
+    if (socket) {
+        var timePassed = Date.now() - startTime;
+        updateStats(timePassed, 'aws:create');
+    }
+
     startTime = Date.now(); // starting time
     var worker = Queue.worker('tweetQueue', consumeTweet);
 };
+
+var updateStats = function(timePassed, event) {
+    var throughput = 50 / (timePassed / 1000);
+    os.cpuUsage(function (cpuload) {
+
+        var stats = {
+            instanceId: instanceId,
+            throughput: throughput,
+            cpuload: cpuload,
+            timestamp: new Date()
+        }
+
+        // save stats
+        var worker = new WorkerStat(stats);
+        worker.save(function (err, stats) {
+
+            if (socket) {
+                socket.emit(event, stats);
+            }
+
+            if (err) console.log(err);
+            console.log(stats);
+
+        });
+
+    });
+}
 
 var aggregate = function () {
     var o = {};
