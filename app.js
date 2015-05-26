@@ -126,7 +126,7 @@ var startWorker = function() {
 			// reset time for processing
 			startTime = Date.now();
 		}
-	}, 5000);
+	}, 1000);
 
     startTime = Date.now(); // starting time
     worker = Queue.worker('tweetQueue', consumeTweet);
@@ -143,7 +143,7 @@ var updateStats = function(timePassed, event) {
         var stats = {
             instanceId: instanceId,
             throughput: Math.round(throughput),
-            cpuload: Math.round(cpuload),
+            cpuload: Math.round(cpuload * 100),
             timestamp: new Date()
         }
 
