@@ -11,20 +11,15 @@ var mongoose = require('mongoose');
 var async = require('async');
 var http = require('http');
 
-var socket = require('socket.io-client'); // TODO: should be location of streamer on amazon
-socket.connect('http://127.0.0.1:9000/socket.io-client');
+// socket.io
+var io = require('socket.io')();
+var redis = require('socket.io-redis');
+io.adapter(redis({ host: 'localhost', port: 6379 }));
 
-socket.on('connect', function(){
-    console.log("socket.io - connected");
-});
+var socket = io.sockets;
 
-socket.on('connect_error', function(err){
-    console.log(err);
-});
-
-socket.on('disconnect', function(){
-    console.log("socket.io - disconnected");
-});
+socket.on('connect', function () { console.log("socket connected"); });
+socket.on('connect-error', function(err) { console.log(err); });
 
 // redis
 var Queue = require('simple-redis-safe-work-queue');
@@ -50,8 +45,9 @@ var WorkerStat = mongoose.model('Worker', statSchema);
 // Connect to database
 mongoose.connect('mongodb://localhost/advsetwitter-dev');
 
-var totalTweets = 0;
+var processedTweets = 0;
 var startTime = 0;
+var worker = null;
 
 // Get InstanceID from AWS
 var instanceId = null;
@@ -79,18 +75,7 @@ var consumeTweet = function (tweet, callback) {
         return;
     }
 
-    totalTweets++;
-
-    if (totalTweets % 50 == 0) {
-
-        // update stats
-        var timePassed = Date.now() - startTime;
-        updateStats(timePassed, 'aws:update');
-
-        // reset time for processing
-        startTime = Date.now();
-
-    }
+	processedTweets++;
 
     var phrases = tweet.phrase.split(",");
     var tweet_text = tweet.text;
@@ -132,23 +117,33 @@ var consumeTweet = function (tweet, callback) {
 
 var startWorker = function() {
 
-    if (socket) {
-        var timePassed = Date.now() - startTime;
-        updateStats(timePassed, 'aws:create');
-    }
+	setInterval(function() {
+		if (socket) {
+			// update stats
+			var timePassed = Date.now() - startTime;
+			updateStats(timePassed, 'aws:update');
+
+			// reset time for processing
+			startTime = Date.now();
+		}
+	}, 5000);
 
     startTime = Date.now(); // starting time
-    var worker = Queue.worker('tweetQueue', consumeTweet);
+    worker = Queue.worker('tweetQueue', consumeTweet);
+
 };
 
 var updateStats = function(timePassed, event) {
-    var throughput = 50 / (timePassed / 1000);
-    os.cpuUsage(function (cpuload) {
+
+	var throughput = processedTweets / 5; // because we update every 5 seconds
+	processedTweets = 0;
+
+	os.cpuUsage(function (cpuload) {
 
         var stats = {
             instanceId: instanceId,
-            throughput: throughput,
-            cpuload: cpuload,
+            throughput: Math.round(throughput),
+            cpuload: Math.round(cpuload),
             timestamp: new Date()
         }
 
@@ -158,6 +153,7 @@ var updateStats = function(timePassed, event) {
 
             if (socket) {
                 socket.emit(event, stats);
+				console.log('emitted ' + event);
             }
 
             if (err) console.log(err);
