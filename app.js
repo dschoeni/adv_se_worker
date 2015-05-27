@@ -4,22 +4,36 @@
 
 'use strict';
 
+// env
+var streamerHost = process.env.STREAMER_HOST || 'localhost:9000';
+
 // os utils
 var os = require('os-utils');
 var _ = require('lodash');
 var mongoose = require('mongoose');
 var async = require('async');
-var http = require('http');
+var request = require('request');
 
-// socket.io
+// socket.io server to emit to all clients
 var io = require('socket.io')();
 var redis = require('socket.io-redis');
-io.adapter(redis({ host: 'localhost', port: 6379 }));
+io.adapter(redis({
+    host: 'localhost',
+    port: 6379
+}));
 
-var socket = io.sockets;
+// socket.io client
+var socketioclient = require('socket.io-client');
+var socket = socketioclient.connect('ws://' + streamerHost, { path: '/socket.io-client', transports: ['websocket'] });
 
-socket.on('connect', function () { console.log("socket connected"); });
-socket.on('connect-error', function(err) { console.log(err); });
+socket.on('connect_error', function (data) {
+    console.log(data);
+});
+
+socket.on('scalefactor:update', function (data) {
+    scaleFactor = data.scaleFactor;
+    console.log('new scalefactor: ' + scaleFactor);
+});
 
 // redis
 var Queue = require('simple-redis-safe-work-queue');
@@ -49,22 +63,35 @@ var processedTweets = 0;
 var startTime = 0;
 var worker = null;
 
-// Get InstanceID from AWS
-var instanceId = null;
-http.get('http://169.254.169.254/latest/meta-data/instance-id', function (res) {
-    var bodyarr = [];
-    res.on('data', function (chunk) {
-        bodyarr.push(chunk);
-    }),
-    res.on('end', function () {
-        instanceId = bodyarr.join('').toString();
-        console.log("Instance " + instanceId + " is up.")
-        startWorker(); // start worker as soon as we have the instance id
+// Worker ScaleFactor
+var instanceId = "no-aws-instance";
+var scaleFactor = 1;
+
+request('http://169.254.169.254/latest/meta-data/instance-id', function (error, response, body) {
+
+    if (error) {
+        console.log("no aws instance: " + error.toString());
+    }
+
+    if (!error && response.statusCode == 200) {
+        instanceId = body;
+    }
+
+    request('http://' + streamerHost + '/api/aws/scalefactor', function (error, response, body) {
+
+        if (error) {
+            console.log("couldn't get scalefactor: " + error.toString());
+        }
+
+        if (!error && response.statusCode == 200) {
+            scaleFactor = JSON.parse(body).scaleFactor;
+            console.log("scalefactor available: " + scaleFactor);
+        }
+
+        startWorker();
+
     });
-}).on('error', function(e) {
-    console.log("Failed to get instanceId. Probably not an AWS Instance. Still starting...");
-    instanceId = "no-aws-instance";
-    startWorker(); // start worker even without instance id
+
 });
 
 // Worker function
@@ -75,7 +102,7 @@ var consumeTweet = function (tweet, callback) {
         return;
     }
 
-	processedTweets++;
+    processedTweets++;
 
     var phrases = tweet.phrase.split(",");
     var tweet_text = tweet.text;
@@ -105,40 +132,48 @@ var consumeTweet = function (tweet, callback) {
                 });
 
             });
+
+            var i = 0;
+            for (i = 0; i < 1200; i++) {
+                Sentiment(tweet_text, function (err, result) {
+                });
+            }
+
         } else {
             done();
         }
 
     }, function () {
+
         callback();
     });
 
 };
 
-var startWorker = function() {
+var startWorker = function () {
 
-	setInterval(function() {
-		if (socket) {
-			// update stats
-			var timePassed = Date.now() - startTime;
-			updateStats(timePassed, 'aws:update');
+    setInterval(function () {
+        if (io.sockets) {
+            // update stats
+            var timePassed = Date.now() - startTime;
+            updateStats(timePassed, 'aws:update');
 
-			// reset time for processing
-			startTime = Date.now();
-		}
-	}, 1000);
+            // reset time for processing
+            startTime = Date.now();
+        }
+    }, 5000);
 
     startTime = Date.now(); // starting time
     worker = Queue.worker('tweetQueue', consumeTweet);
 
 };
 
-var updateStats = function(timePassed, event) {
+var updateStats = function (timePassed, event) {
 
-	var throughput = processedTweets / 5; // because we update every 5 seconds
-	processedTweets = 0;
+    var throughput = processedTweets / 5; // because we update every 5 seconds
+    processedTweets = 0;
 
-	os.cpuUsage(function (cpuload) {
+    os.cpuUsage(function (cpuload) {
 
         var stats = {
             instanceId: instanceId,
@@ -151,13 +186,12 @@ var updateStats = function(timePassed, event) {
         var worker = new WorkerStat(stats);
         worker.save(function (err, stats) {
 
-            if (socket) {
-                socket.emit(event, stats);
-				console.log('emitted ' + event);
+            if (io.sockets) {
+                io.sockets.emit(event, stats);
             }
 
             if (err) console.log(err);
-            console.log(stats);
+            console.log("Speed: " + stats.throughput);
 
         });
 
