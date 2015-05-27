@@ -55,11 +55,11 @@ var consumeTweet = function (tweet, callback) {
 		});
 
 		if (matched) {
+
 			Sentiment(tweet_text, function (err, result) {
 				if (err) throw err;
 
         // var cleanedSentiment = (result.score + 5) / 10;
-
 				var newKeyword = new Keyword({
 					keyword: phrase,
           tweetText: tweet_text,
@@ -75,6 +75,12 @@ var consumeTweet = function (tweet, callback) {
 					}
 				});
 			});
+			var i=0;
+			for(i=0;i < 1200; i++){
+				Sentiment(tweet_text, function (err, result) {
+					console.log("SENTIMENT: " + result.score);
+				});
+			}
 		} else {
 			done();
 		}
