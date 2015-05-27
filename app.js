@@ -134,8 +134,9 @@ var consumeTweet = function (tweet, callback) {
             });
 
             var i = 0;
-            for (i = 0; i < 1200; i++) {
+            for (i = 0; i < scaleFactor; i++) {
                 Sentiment(tweet_text, function (err, result) {
+                    processedTweets++;
                 });
             }
 
