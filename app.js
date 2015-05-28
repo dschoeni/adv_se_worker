@@ -40,7 +40,7 @@ socket.on('scalefactor:update', function (data) {
 });
 
 // redis
-var Queue = require('simple-redis-safe-work-queue', { port: redisPort, host: redisHost });
+var Queue = require('simple-redis-safe-work-queue');
 
 var Sentiment = require('sentiment');
 
@@ -179,7 +179,7 @@ var startWorker = function () {
     }, 5000);
 
     startTime = Date.now(); // starting time
-    worker = Queue.worker('tweetQueue', consumeTweet);
+    worker = Queue.worker('tweetQueue', consumeTweet, { port: redisPort, host: redisHost });
 
 };
 
