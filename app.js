@@ -6,6 +6,10 @@
 
 // env
 var streamerHost = process.env.STREAMER_HOST || 'localhost:9000';
+var mongoDbUrl = process.env.MONGO_URL || 'mongodb://localhost/advsetwitter-dev';
+var redisPort = process.env.REDIS_PORT || '6379';
+var redisHost = process.env.REDIS_HOST || 'localhost';
+
 
 // os utils
 var os = require('os-utils');
@@ -18,8 +22,8 @@ var request = require('request');
 var io = require('socket.io')();
 var redis = require('socket.io-redis');
 io.adapter(redis({
-    host: 'localhost',
-    port: 6379
+    host: redisHost,
+    port: redisPort
 }));
 
 // socket.io client
@@ -36,7 +40,7 @@ socket.on('scalefactor:update', function (data) {
 });
 
 // redis
-var Queue = require('simple-redis-safe-work-queue');
+var Queue = require('simple-redis-safe-work-queue', { port: redisPort, host: redisHost });
 
 var Sentiment = require('sentiment');
 
@@ -57,7 +61,7 @@ var statSchema = mongoose.Schema({
 var WorkerStat = mongoose.model('Worker', statSchema);
 
 // Connect to database
-mongoose.connect('mongodb://localhost/advsetwitter-dev');
+mongoose.connect(mongoDbUrl);
 
 var processedTweets = 0;
 var startTime = 0;
@@ -102,47 +106,56 @@ var consumeTweet = function (tweet, callback) {
         return;
     }
 
-    processedTweets++;
-
     var phrases = tweet.phrase.split(",");
     var tweet_text = tweet.text;
 
     async.each(phrases, function (phrase, done) {
 
-        var matched = _.find(tests, function (testfunction) {
-            return testfunction(tweet, phrase);
-        });
+        var i = 0;
+		var matched;
 
-        if (matched) {
-            Sentiment(tweet_text, function (err, result) {
-                if (err) throw err;
+        for (i = 0; i <= scaleFactor; i++) {
 
-                // var cleanedSentiment = (result.score + 5) / 10;
+			var matched = _.find(tests, function (testfunction) {
+				return testfunction(tweet, phrase);
+			});
 
-                var newKeyword = new Keyword({
-                    keyword: phrase,
-                    tweetText: tweet_text,
-                    sentiment: result.score,
-                    timestamp: new Date()
-                });
+		}
 
-                newKeyword.save(function (err, keyword) {
-                    if (err) console.log(err);
-                    done();
-                });
+		if (matched) {
+			for (i = 0; i <= scaleFactor; i++) {
 
-            });
+				if (i == scaleFactor) {
+					processedTweets++;
+					Sentiment(tweet_text, function (err, result) {
+						if (err) throw err;
 
-            var i = 0;
-            for (i = 0; i < scaleFactor; i++) {
-                Sentiment(tweet_text, function (err, result) {
-                    processedTweets++;
-                });
-            }
+						// var cleanedSentiment = (result.score + 5) / 10;
 
-        } else {
-            done();
-        }
+						var newKeyword = new Keyword({
+							keyword: phrase,
+							tweetText: tweet_text,
+							sentiment: result.score,
+							timestamp: new Date()
+						});
+
+						newKeyword.save(function (err, keyword) {
+							if (err) console.log(err);
+							done();
+						});
+
+					});
+
+				} else {
+					Sentiment(tweet_text, function (err, result) {
+						processedTweets++;
+					});
+				}
+
+			}
+		} else {
+			done();
+		}
 
     }, function () {
 
@@ -171,7 +184,7 @@ var startWorker = function () {
 
 var updateStats = function (timePassed, event) {
 
-    var throughput = processedTweets / 5; // because we update every 5 seconds
+    var throughput = processedTweets / (timePassed / 1000); // because we update every 5 seconds
     processedTweets = 0;
 
     os.cpuUsage(function (cpuload) {
