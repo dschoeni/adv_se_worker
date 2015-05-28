@@ -2,6 +2,10 @@
 
 local.env.js
 
+### Redis ###
+# Ignore redis binary dump (dump.rdb) files
+*.rdb
+
 ### Node ###
 # Logs
 logs
