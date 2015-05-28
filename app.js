@@ -74,7 +74,8 @@ var scaleFactor = 1;
 request('http://169.254.169.254/latest/meta-data/instance-id', function (error, response, body) {
 
     if (error) {
-        console.log("no aws instance: " + error.toString());
+        console.log("no aws instance. use local from env: " + process.env.INSTANCEID);
+        instanceId = process.env.INSTANCEID;
     }
 
     if (!error && response.statusCode == 200) {
