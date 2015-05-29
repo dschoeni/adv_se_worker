@@ -18,6 +18,10 @@ var mongoose = require('mongoose');
 var async = require('async');
 var request = require('request');
 
+// moving average util
+var movingAverage = require('moving-average');
+var ma = movingAverage(45 * 1000);
+
 // socket.io server to emit to all clients
 var io = require('socket.io')();
 var redis = require('socket.io-redis');
@@ -35,7 +39,10 @@ socket.on('connect_error', function (data) {
 });
 
 socket.on('scalefactor:update', function (data) {
-	scaleFactor = data.scaleFactor * 100; // slow worker down considerably
+	scaleFactor = data.scaleFactor;
+	if (scaleFactor > 1) { // slow worker down considerably
+		scaleFactor = scaleFactor * 20;
+	}
 	console.log('new scalefactor: ' + scaleFactor);
 });
 
@@ -90,6 +97,9 @@ request('http://169.254.169.254/latest/meta-data/instance-id', function (error, 
 
 		if (!error && response.statusCode == 200) {
 			scaleFactor = JSON.parse(body).scaleFactor;
+			if (scaleFactor > 1) { // slow worker down considerably
+				scaleFactor = scaleFactor * 20;
+			}
 			console.log("scalefactor available: " + scaleFactor);
 		}
 
@@ -113,21 +123,18 @@ var consumeTweet = function (tweet, callback) {
 
 	async.each(phrases, function (phrase, done) {
 
-		var i = 0;
 		var matched;
 
-		for (i = 0; i <= scaleFactor; i++) {
-
+		for (var i = 0; i <= scaleFactor; i++) {
 			var matched = _.find(tests, function (testfunction) {
 				return testfunction(tweet, phrase);
 			});
-
 		}
 
 		if (matched) {
-			for (i = 0; i <= scaleFactor; i++) {
+			for (var u = 0; u <= scaleFactor; u++) {
 
-				if (i == scaleFactor) {
+				if (u == scaleFactor) {
 					Sentiment(tweet_text, function (err, result) {
 						if (err) throw err;
 
@@ -159,7 +166,6 @@ var consumeTweet = function (tweet, callback) {
 		}
 
 	}, function () {
-
 		callback();
 	});
 
@@ -167,11 +173,12 @@ var consumeTweet = function (tweet, callback) {
 
 var startWorker = function () {
 
+	startTime = Date.now(); // starting time
+
 	setInterval(function () {
 		sendStatus();
 	}, 5000);
 
-	startTime = Date.now(); // starting time
 	sendStatus();
 
 	worker = Queue.worker('tweetQueue', consumeTweet, {port: redisPort, host: redisHost});
@@ -181,24 +188,23 @@ var startWorker = function () {
 var sendStatus = function () {
 	if (io.sockets) {
 		// update stats
-		var timePassed = Date.now() - startTime;
-		updateStats(timePassed, 'aws:update');
-
-		// reset time for processing
-		startTime = Date.now();
+		updateStats('aws:update');
 	}
 }
 
-var updateStats = function (timePassed, event) {
+var updateStats = function (event) {
 
-	var throughput = processedTweets / (timePassed / 1000); // because we update every 5 seconds
+	var currentThroughput = processedTweets / ((Date.now() - startTime) / 1000) || 0;
+	ma.push(Date.now(), currentThroughput);
 	processedTweets = 0;
+	startTime = Date.now();
+	var movingAverage = ma.movingAverage();
 
 	os.cpuUsage(function (cpuload) {
 
 		var stats = {
 			instanceId: instanceId,
-			throughput: Math.round(throughput),
+			throughput: Math.round(movingAverage),
 			cpuload: Math.round(cpuload * 100),
 			timestamp: new Date()
 		}
