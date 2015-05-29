@@ -180,11 +180,13 @@ var startWorker = function () {
 
 	startTime = Date.now(); // starting time
 
+    /*
 	setInterval(function () {
 		sendStatus();
 	}, 5000);
 
 	sendStatus();
+    */
 
 	worker = Queue.worker('tweetQueue', consumeTweet, {port: redisPort, host: redisHost});
 
