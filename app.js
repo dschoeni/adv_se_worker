@@ -35,7 +35,7 @@ var socketioclient = require('socket.io-client');
 var socket = socketioclient.connect('ws://' + streamerHost, {path: '/socket.io-client', transports: ['websocket']});
 
 socket.on('connect_error', function (data) {
-	console.log(data);
+    console.log("websocket couldn't make connection.")
 });
 
 socket.on('scalefactor:update', function (data) {
@@ -78,7 +78,7 @@ var worker = null;
 var instanceId = "no-aws-instance";
 var scaleFactor = 1;
 
-request('http://169.254.169.254/latest/meta-data/instance-id', function (error, response, body) {
+request({ url: 'http://169.254.169.254/latest/meta-data/instance-id', timeout: 2000 }, function (error, response, body) {
 
 	if (error) {
 		console.log("no aws instance. use local from env: " + process.env.INSTANCEID);
@@ -89,7 +89,7 @@ request('http://169.254.169.254/latest/meta-data/instance-id', function (error, 
 		instanceId = body;
 	}
 
-	request('http://' + streamerHost + '/api/aws/scalefactor', function (error, response, body) {
+    request({ url: 'http://' + streamerHost + '/api/aws/scalefactor', timeout: 2000 }, function (error, response, body) {
 
 		if (error) {
 			console.log("couldn't get scalefactor: " + error.toString());
