@@ -210,6 +210,7 @@ var updateStats = function (event) {
 		}
 
 		if (io.sockets) {
+			console.log("Processing Tweets... " + stats.throughput);
 			io.sockets.emit(event, stats);
 		}
 
