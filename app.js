@@ -113,6 +113,9 @@ request({ url: 'http://169.254.169.254/latest/meta-data/instance-id', timeout: 2
 var consumeTweet = function (tweet, callback) {
 
 	processedTweets++;
+
+	console.log("consuming tweet: " + tweet.text);
+
 	if (tweet.entities == undefined || tweet == undefined) {
 		callback(); // continue
 		return;
@@ -122,6 +125,8 @@ var consumeTweet = function (tweet, callback) {
 	var tweet_text = tweet.text;
 
 	async.each(phrases, function (phrase, done) {
+
+		console.log("entering async...");
 
 		var matched;
 
