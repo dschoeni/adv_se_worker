@@ -41,7 +41,7 @@ socket.on('connect_error', function (data) {
 socket.on('scalefactor:update', function (data) {
 	scaleFactor = data.scaleFactor;
 	if (scaleFactor > 1) { // slow worker down considerably
-		scaleFactor = scaleFactor * 20;
+		//scaleFactor = scaleFactor * 20;
 	}
 	console.log('new scalefactor: ' + scaleFactor);
 });
@@ -98,7 +98,7 @@ request({ url: 'http://169.254.169.254/latest/meta-data/instance-id', timeout: 2
 		if (!error && response.statusCode == 200) {
 			scaleFactor = JSON.parse(body).scaleFactor;
 			if (scaleFactor > 1) { // slow worker down considerably
-				scaleFactor = scaleFactor * 20;
+				//scaleFactor = scaleFactor * 20;
 			}
 			console.log("scalefactor available: " + scaleFactor);
 		}
