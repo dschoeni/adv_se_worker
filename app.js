@@ -114,8 +114,6 @@ var consumeTweet = function (tweet, callback) {
 
 	processedTweets++;
 
-	console.log("consuming tweet: " + tweet.text);
-
 	if (tweet.entities == undefined || tweet == undefined) {
 		callback(); // continue
 		return;
@@ -125,8 +123,6 @@ var consumeTweet = function (tweet, callback) {
 	var tweet_text = tweet.text;
 
 	async.each(phrases, function (phrase, done) {
-
-		console.log("entering async...");
 
 		var matched;
 
@@ -142,8 +138,6 @@ var consumeTweet = function (tweet, callback) {
 				if (u == scaleFactor) {
 					Sentiment(tweet_text, function (err, result) {
 						if (err) throw err;
-
-						// var cleanedSentiment = (result.score + 5) / 10;
 
 						var newKeyword = new Keyword({
 							keyword: phrase,
@@ -187,6 +181,7 @@ var startWorker = function () {
 	sendStatus();
 
 	worker = Queue.worker('tweetQueue', consumeTweet, {port: redisPort, host: redisHost});
+	console.log("Starting to process tweets...");
 
 };
 
@@ -215,48 +210,11 @@ var updateStats = function (event) {
 		}
 
 		if (io.sockets) {
-			console.log("Processing Tweets... " + stats.throughput);
 			io.sockets.emit(event, stats);
 		}
 
-		/*
-		 // save stats
-		 var worker = new WorkerStat(stats);
-		 worker.save(function (err, stats) {
-
-		 if (io.sockets) {
-		 io.sockets.emit(event, stats);
-		 }
-
-		 if (err) console.log(err);
-		 console.log("Speed: " + stats.throughput);
-
-		 });
-		 */
-
 	});
 }
-
-var aggregate = function () {
-	var o = {};
-	o.map = function () {
-		emit(this.keyword, this.sentiment)
-	};
-	o.reduce = function (k, vals) {
-		var sum = 0;
-		for (var i = 0; i < vals.length; i++) {
-			sum += vals[i];
-		}
-		return sum / vals.length;
-	};
-	o.out = {replace: 'aggregated'};
-	o.verbose = true;
-
-	Keyword.mapReduce(o, function (err, model, stats) {
-		if (err) throw err;
-		console.log('map reduce finished in ' + stats.processtime + ' ms. check collection aggregated!');
-	})
-};
 
 function twitterMatch(text, phrase) {
 	// TODO: to be improved with fancy regex according to https://dev.twitter.com/streaming/overview/request-parameters#track
